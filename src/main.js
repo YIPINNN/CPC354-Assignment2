@@ -10,14 +10,12 @@ var modelViewMatrix, projectionMatrix, nMatrix;
 
 // Variables referencing HTML elements
 // theta = [x, y, z]
-const X_AXIS = 0;
-const Y_AXIS = 1;
-const Z_AXIS = 2;
-var cylinderX, cylinderY, cylinderZ, cylinderAxis = X_AXIS, cylinderBtn;
-var cubeX, cubeY, cubeZ, cubeAxis = X_AXIS, cubeBtn;
-var cylinderObj, cubeObj, cylinderFlag = false, cubeFlag = false;
-var cylinderTheta = [0,0,0], cubeTheta = [0, 0, 0], animFrame = 0;
-var pointsArray = [], normalsArray = [], cylinderV, cubeV, totalV;
+var sliderAmbient, sliderDiffuse, sliderSpecular, sliderShininess;
+var sliderLightX, sliderLightY, sliderLightZ;
+var textAmbient, textDiffuse, textSpecular, textShininess;
+var textLightX, textLightY, textLightZ;
+var startBtn, theta = [0, 0, 0];
+var subdivNum = 5, animFrame = 0, animFlag = false;
 
 // Variables for lighting control
 var ambientProduct, diffuseProduct, specularProduct;
@@ -31,6 +29,13 @@ var materialAmbient = vec4(0.5, 0.5, 1.0, 1.0);
 var materialDiffuse = vec4(0.0, 0.9, 1.0, 1.0);
 var materialSpecular = vec4(1.0, 1.0, 1.0, 1.0);
 
+var eye = vec3(1.0, 1.0, 1.0);
+var at = vec3(0.0, 0.0, 0.0);
+var up = vec3(0.0, 1.0, 0.0);
+
+// Variables for the sphere
+var sphereObj, points = [], normals = [];
+
 /*-----------------------------------------------------------------------------------*/
 // WebGL Utilities
 /*-----------------------------------------------------------------------------------*/
@@ -39,20 +44,9 @@ var materialSpecular = vec4(1.0, 1.0, 1.0, 1.0);
 window.onload = function init()
 {
     // Primitive (geometric shape) initialization
-    // Shape 1 = Cylinder, Shape 2 = Cube
-    cylinderObj = cylinder(72, 3, true);
-    cylinderObj.Rotate(45, [1, 1, 0]);
-    cylinderObj.Scale(1.2, 1.2, 1.2);
-    concatData(cylinderObj.Point, cylinderObj.Normal);
-
-    cubeObj = cube();
-    cubeObj.Rotate(45, [1, 1, 0]);
-    cubeObj.Scale(1, 1, 1);
-    concatData(cubeObj.Point, cubeObj.Normal);
-    
-    cylinderV = (cylinderObj.Point).length;
-    cubeV = (cubeObj.Point).length;
-	totalV = pointsArray.length;
+    sphereObj = sphere(subdivNum);
+    points = sphereObj.Point;
+    normals = sphereObj.Normal;
 
     // WebGL setups
     getUIElement();
@@ -64,55 +58,80 @@ window.onload = function init()
 function getUIElement()
 {
     canvas = document.getElementById("gl-canvas");
+    sliderAmbient = document.getElementById("slider-ambient");
+    sliderDiffuse = document.getElementById("slider-diffuse");
+    sliderSpecular = document.getElementById("slider-specular");
+    sliderShininess = document.getElementById("slider-shininess");
+    sliderLightX = document.getElementById("slider-light-x");
+    sliderLightY = document.getElementById("slider-light-y");
+    sliderLightZ = document.getElementById("slider-light-z");
+    textAmbient = document.getElementById("text-ambient");
+    textDiffuse = document.getElementById("text-diffuse");
+    textSpecular = document.getElementById("text-specular");
+    textShininess = document.getElementById("text-shininess");
+    textLightX = document.getElementById("text-light-x");
+    textLightY = document.getElementById("text-light-y");
+    textLightZ = document.getElementById("text-light-z");
+    startBtn = document.getElementById("start-btn");
 
-    cylinderX = document.getElementById("cylinder-x");
-    cylinderY = document.getElementById("cylinder-y");
-    cylinderZ = document.getElementById("cylinder-z");
-    cylinderBtn = document.getElementById("cylinder-btn");
-
-    cubeX = document.getElementById("cube-x");
-    cubeY = document.getElementById("cube-y");
-    cubeZ = document.getElementById("cube-z");
-    cubeBtn = document.getElementById("cube-btn");
-
-    cylinderX.onchange = function() 
+    sliderAmbient.onchange = function(event) 
 	{
-		if(cylinderX.checked) cylinderAxis = X_AXIS;
+		ambient = event.target.value;
+		textAmbient.innerHTML = ambient;
+        lightAmbient = vec4(ambient, ambient, ambient, 1.0);
+        recompute();
     };
 
-    cylinderY.onchange = function() 
+    sliderDiffuse.onchange = function(event) 
 	{
-		if(cylinderY.checked) cylinderAxis = Y_AXIS;
+		diffuse = event.target.value;
+		textDiffuse.innerHTML = diffuse;
+        lightDiffuse = vec4(diffuse, diffuse, diffuse, 1.0);
+        recompute();
     };
 
-    cylinderZ.onchange = function() 
+    sliderSpecular.onchange = function(event) 
 	{
-		if(cylinderZ.checked) cylinderAxis = Z_AXIS;
+		specular = event.target.value;
+		textSpecular.innerHTML = specular;
+        lightSpecular = vec4(specular, specular, specular, 1.0);
+        recompute();
     };
 
-    cylinderBtn.onclick = function()
+    sliderShininess.onchange = function(event) 
 	{
-		cylinderFlag = !cylinderFlag;
-	};
-
-    cubeX.onchange = function() 
-	{
-		if(cubeX.checked) cubeAxis = X_AXIS;
+		shininess = event.target.value;
+		textShininess.innerHTML = shininess;
+        recompute();
     };
 
-    cubeY.onchange = function() 
+    sliderLightX.onchange = function(event) 
 	{
-		if(cubeY.checked) cubeAxis = Y_AXIS;
+		lightPos[0] = event.target.value;
+		textLightX.innerHTML = lightPos[0].toFixed(1);
+        recompute();
     };
 
-    cubeZ.onchange = function() 
+    sliderLightY.onchange = function(event) 
 	{
-		if(cubeZ.checked) cubeAxis = Z_AXIS;
+		lightPos[1] = event.target.value;
+		textLightY.innerHTML = lightPos[1].toFixed(1);
+        recompute();
     };
 
-    cubeBtn.onclick = function()
+    sliderLightZ.onchange = function(event) 
 	{
-		cubeFlag = !cubeFlag;
+		lightPos[2] = event.target.value;
+		textLightZ.innerHTML = lightPos[2].toFixed(1);
+        recompute();
+    };
+
+    startBtn.onclick = function()
+	{
+		animFlag = !animFlag;
+
+        if(animFlag) animUpdate();
+        else window.cancelAnimationFrame(animFrame);
 	};
 }
 
@@ -142,7 +161,7 @@ function configWebGL()
     // Buffer for positions
     pBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, pBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, flatten(pointsArray), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(points), gl.STATIC_DRAW);
 
     vPosition = gl.getAttribLocation(program, "vPosition");
     gl.vertexAttribPointer(vPosition, 4, gl.FLOAT, false, 0, 0);
@@ -151,7 +170,7 @@ function configWebGL()
     // Buffer for normals
     nBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, nBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, flatten(normalsArray), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(normals), gl.STATIC_DRAW);
     
     vNormal = gl.getAttribLocation(program, "vNormal");
     gl.vertexAttribPointer(vNormal, 3, gl.FLOAT, false, 0, 0);
@@ -167,13 +186,12 @@ function configWebGL()
 function render()
 {
     // Cancel the animation frame before performing any graphic rendering
-    if(cylinderFlag || cubeFlag)
+    if(animFlag)
     {
-        cylinderFlag = false;
-        cubeFlag = false;
+        animFlag = false;
         window.cancelAnimationFrame(animFrame);
     }
-
+    
     // Clear the color buffer and the depth buffer before rendering a new frame
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -181,6 +199,15 @@ function render()
     // ortho(left, right, bottom, top, near, far)
     projectionMatrix = ortho(-4, 4, -2.25, 2.25, -5, 5);
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
+
+    // Pass the model view matrix from JavaScript to the GPU for use in shader
+    modelViewMatrix = lookAt(eye, at , up);
+    modelViewMatrix = mult(modelViewMatrix, rotateZ(theta[2]));
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
+
+    // Pass the normal matrix from JavaScript to the GPU for use in shader
+    nMatrix = normalMatrix(modelViewMatrix);
+    gl.uniformMatrix3fv(normalMatrixLoc, false, nMatrix);
 
     // Compute the ambient, diffuse, and specular values
     ambientProduct = mult(lightAmbient, materialAmbient);
@@ -192,7 +219,22 @@ function render()
     gl.uniform4fv(gl.getUniformLocation(program, "lightPos"), flatten(lightPos));
     gl.uniform1f(gl.getUniformLocation(program, "shininess"), shininess);
 
-    animUpdate();
+    // Draw the primitive / geometric shape
+    gl.drawArrays(gl.TRIANGLES, 0, points.length);
+}
+
+// Recompute points and colors, followed by reconfiguring WebGL for rendering
+function recompute()
+{
+    // Reset points and normals for render update
+    points = [];
+	normals = [];
+    
+    sphereObj = sphere(subdivNum);
+    points = sphereObj.Point;
+    normals = sphereObj.Normal;
+    configWebGL();
+    render();
 }
 
 // Update the animation frame
@@ -201,68 +243,19 @@ function animUpdate()
     // Clear the color buffer and the depth buffer before rendering a new frame
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    drawCylinder();
-    drawCube();
- 
+    // Z-axis rotation increment by 1
+    theta[2] -= 1;
+
+    // Set the model view matrix for vertex transformation
+    modelViewMatrix = lookAt(eye, at , up);
+    modelViewMatrix = mult(modelViewMatrix, rotateZ(theta[2]));
+    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
+
+    // Draw the primitive / geometric shape
+    gl.drawArrays(gl.TRIANGLES, 0, points.length);
+
     // Schedule the next frame for a looped animation (60fps)
     animFrame = window.requestAnimationFrame(animUpdate);
-}
-
-// Draw the first shape (cylinder)
-function drawCylinder()
-{
-    // Increment the rotation value if the animation is enabled
-    if(cylinderFlag)
-    {
-        cylinderTheta[cylinderAxis] += 1;
-    }
-
-    // Pass the model view matrix from JavaScript to the GPU for use in shader
-    modelViewMatrix = mat4();
-    modelViewMatrix = mult(modelViewMatrix, translate(-1.5, 0, 0));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cylinderTheta[X_AXIS], [1, 0, 0]));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cylinderTheta[Y_AXIS], [0, 1, 0]));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cylinderTheta[Z_AXIS], [0, 0, 1]));
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
-
-    // Pass the normal matrix from JavaScript to the GPU for use in shader
-    nMatrix = normalMatrix(modelViewMatrix);
-    gl.uniformMatrix3fv(normalMatrixLoc, false, nMatrix);
-
-    // Draw the primitive from index 0 to the last index of shape 1
-    gl.drawArrays(gl.TRIANGLES, 0, cylinderV);
-}
-
-// Draw the second shape (cube)
-function drawCube()
-{
-    // Increment the rotation value if the animation is enabled
-    if(cubeFlag)
-    {
-        cubeTheta[cubeAxis] += 1;
-    }
-
-    // Pass the model view matrix from JavaScript to the GPU for use in shader
-    modelViewMatrix = mat4();
-    modelViewMatrix = mult(modelViewMatrix, translate(1.5, 0, 0));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cubeTheta[X_AXIS], [1, 0, 0]));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cubeTheta[Y_AXIS], [0, 1, 0]));
-    modelViewMatrix = mult(modelViewMatrix, rotate(cubeTheta[Z_AXIS], [0, 0, 1]));
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
-
-    // Pass the normal matrix from JavaScript to the GPU for use in shader
-    nMatrix = normalMatrix(modelViewMatrix);
-    gl.uniformMatrix3fv(normalMatrixLoc, false, nMatrix);
-
-    // Draw the primitive from the last index of shape 1 to the last index of shape 2
-    gl.drawArrays(gl.TRIANGLES, cylinderV, cubeV);
-}
-
-// Concatenate the corresponding shape's values
-function concatData(point, normal)
-{
-	pointsArray = pointsArray.concat(point);
-	normalsArray = normalsArray.concat(normal);
 }
 
 /*-----------------------------------------------------------------------------------*/
